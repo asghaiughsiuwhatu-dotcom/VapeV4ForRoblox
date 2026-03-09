@@ -16845,4 +16845,176 @@ run(function()
     })
 end)
 
+run(function()
+    local AirHits = {Enabled = false}
+    local AirHitsChance = {Value = 100}
+    local AirHitsRange = {Value = 18}
+    local VerticalCheck = {Enabled = true}
+
+    -- Optimized Module in Blatant Category
+    local AirHitsModule = vape.Categories.Blatant:CreateModule({
+        Name = 'AirHits+',
+        Function = function(callback)
+            AirHits.Enabled = callback
+            if callback then
+                task.spawn(function()
+                    repeat
+                        -- 1. Performance Check: Hand/Sword Check
+                        local sword = store.tools.sword
+                        if sword and sword.tool then
+                            -- 2. Target Acquisition using Vape's Entity Library
+                            local targets = entitylib.AllPosition({
+                                Range = AirHitsRange.Value,
+                                Wallcheck = true,
+                                Players = true,
+                                NPCs = false,
+                                Limit = 1,
+                                Sort = 'Distance'
+                            })
+
+                            for _, v in pairs(targets) do
+                                local hum = v.Character:FindFirstChildOfClass("Humanoid")
+                                local root = v.RootPart
+                                
+                                if hum and root then
+                                    local state = hum:GetState()
+                                    local velocity = math.abs(root.Velocity.Y)
+                                    
+                                    -- 3. Logic: Is the target airborne?
+                                    local isJumping = (state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall)
+                                    local isMovingVertically = (VerticalCheck.Enabled and velocity > 0.1) or true
+
+                                    if isJumping and isMovingVertically then
+                                        -- 4. Probability Engine
+                                        if math.random(1, 100) <= AirHitsChance.Value then
+                                            local AttackRemote = bedwars.Client:Get(remotes.AttackEntity).instance
+                                            AttackRemote:FireServer({
+                                                weapon = sword.tool,
+                                                entityInstance = v.Character,
+                                                validate = {
+                                                    targetPosition = {value = root.Position},
+                                                    selfPosition = {value = entitylib.character.RootPart.Position}
+                                                }
+                                            })
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        -- 5. Optimized Heartbeat: Prevents lag while remaining fast
+                        task.wait(0.05) 
+                    until not AirHits.Enabled
+                end)
+            end
+        end,
+        Tooltip = 'Enhanced Air Hits: Only targets players mid-jump or falling.'
+    })
+
+    -- UI Settings (Found in the 3-dot menu)
+    AirHitsChance = AirHitsModule:CreateSlider({
+        Name = 'Hit Chance',
+        Min = 1,
+        Max = 100,
+        Default = 90,
+        Suffix = '%',
+        Function = function(val) AirHitsChance.Value = val end
+    })
+
+    AirHitsRange = AirHitsModule:CreateSlider({
+        Name = 'Range',
+        Min = 1,
+        Max = 20,
+        Default = 18,
+        Suffix = ' studs',
+        Function = function(val) AirHitsRange.Value = val end
+    })
+
+    VerticalCheck = AirHitsModule:CreateToggle({
+        Name = 'Velocity Check',
+        Default = true,
+        Function = function(callback) VerticalCheck.Enabled = callback end,
+        Tooltip = 'Only hits if the target has upward/downward momentum.'
+    })
+end)
+run(function()
+    local AntiHit = {Enabled = false}
+    local AntiHitRange = {Value = 15}
+    local AntiHitHeight = {Value = 8}
+    
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local Camera = workspace.CurrentCamera
+
+    -- Target Finder
+    local function GetClosestPlayer()
+        local closest = nil
+        local maxDist = AntiHitRange.Value
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = player.Character.HumanoidRootPart
+                local hum = player.Character:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health > 0 then
+                    local dist = (LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
+                    if dist < maxDist then
+                        maxDist = dist
+                        closest = player
+                    end
+                end
+            end
+        end
+        return closest
+    end
+
+    -- Create Module
+    local AntiHitModule = vape.Categories.Blatant:CreateModule({
+        Name = "AntiHitProto",
+        Function = function(callback)
+            AntiHit.Enabled = callback
+            if callback then
+                task.spawn(function()
+                    while AntiHit.Enabled do
+                        local Char = LocalPlayer.Character
+                        local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+                        
+                        if Root then
+                            local target = GetClosestPlayer()
+                            if target and target.Character then
+                                local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+                                local tHead = target.Character:FindFirstChild("Head")
+                                
+                                if tRoot and tHead then
+                                    -- Instant Snap to Range
+                                    local targetPos = tHead.Position + Vector3.new(0, AntiHitHeight.Value, 0)
+                                    Root.CFrame = CFrame.new(targetPos, tRoot.Position)
+                                    
+                                    -- Keep Camera Locked
+                                    Camera.CFrame = CFrame.new(Camera.CFrame.Position, tRoot.Position)
+                                end
+                            end
+                        end
+                        task.wait() -- Fast response
+                    end
+                end)
+            end
+        end,
+        Tooltip = "Snaps you above the enemy when they enter your range."
+    })
+
+    -- Only the Range and Height Sliders
+    AntiHitRange = AntiHitModule:CreateSlider({
+        Name = "Activation Range",
+        Min = 5, Max = 30, Default = 15,
+        Suffix = " studs",
+        Function = function(val) AntiHitRange.Value = val end
+    })
+
+    AntiHitHeight = AntiHitModule:CreateSlider({
+        Name = "Teleport Height",
+        Min = 0, Max = 15, Default = 8,
+        Suffix = " studs",
+        Function = function(val) AntiHitHeight.Value = val end
+    })
+end)
+
+																										
 --notif('Zenwear ☁️', 'Loaded!', 10)
