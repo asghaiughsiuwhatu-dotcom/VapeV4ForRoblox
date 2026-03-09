@@ -1,4 +1,5 @@
 --This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
+--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 local run = function(func)
 	func()
 end
@@ -2294,14 +2295,30 @@ run(function()
 							local selfpos = entitylib.character.RootPart.Position
 							local localfacing = entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1)
 
+							local airRange = AirHit.Enabled and AirHitRange.Value or AttackRange.Value
+
 							for _, v in plrs do
 								local delta = (v.RootPart.Position - selfpos)
 								local angle = math.acos(localfacing:Dot((delta * Vector3.new(1, 0, 1)).Unit))
 								if angle > (math.rad(AngleSlider.Value) / 2) then continue end
 
+								-- AirHit filter: only proceed if target is airborne (when enabled)
+								if AirHit.Enabled then
+									local hum = v.Character:FindFirstChildOfClass("Humanoid")
+									if not hum then continue end
+									local state = hum:GetState()
+									local isAirborne = (state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall)
+									if VerticalCheck.Enabled then
+										local velocity = math.abs(v.RootPart.Velocity.Y)
+										isAirborne = isAirborne and (velocity > 0.1)
+									end
+									if not isAirborne then continue end
+									if math.random(1,100) > AirHitChance.Value then continue end
+								end
+
 								table.insert(attacked, {
 									Entity = v,
-									Check = delta.Magnitude > AttackRange.Value and BoxSwingColor or BoxAttackColor
+									Check = delta.Magnitude > airRange and BoxSwingColor or BoxAttackColor
 								})
 								targetinfo.Targets[v] = tick() + 1
 
@@ -2321,7 +2338,7 @@ run(function()
 									end
 								end
 
-								if delta.Magnitude > AttackRange.Value then continue end
+								if delta.Magnitude > airRange then continue end
 								if delta.Magnitude < 14.4 and (tick() - swingCooldown) < math.max(ChargeTime.Value, 0.02) then continue end
 
 								local actualRoot = v.Character.PrimaryPart
@@ -2374,7 +2391,6 @@ run(function()
 						entitylib.character.RootPart.CFrame = CFrame.lookAt(entitylib.character.RootPart.Position, Vector3.new(vec.X, entitylib.character.RootPart.Position.Y + 0.001, vec.Z))
 					end
 
-					--#attacked > 0 and #attacked * 0.02 or
 					task.wait(1 / UpdateRate.Value)
 				until not Killaura.Enabled
 			else
@@ -2645,6 +2661,41 @@ run(function()
 	LegitAura = Killaura:CreateToggle({
 		Name = 'Swing only',
 		Tooltip = 'Only attacks while swinging manually'
+	})
+
+	AirHit = Killaura:CreateToggle({
+		Name = 'AirHit+',
+		Function = function(callback)
+			AirHitChance.Object.Visible = callback
+			AirHitRange.Object.Visible = callback
+			VerticalCheck.Object.Visible = callback
+		end,
+		Tooltip = 'attack targets that are airborne'
+	})
+
+	AirHitChance = Killaura:CreateSlider({
+		Name = 'AirHit Chance',
+		Min = 1,
+		Max = 100,
+		Default = 90,
+		Suffix = '%',
+		Visible = false
+	})
+
+	AirHitRange = Killaura:CreateSlider({
+		Name = 'AirHit Range',
+		Min = 1,
+		Max = 18,
+		Default = 18,
+		Suffix = 'studs',
+		Visible = false
+	})
+
+	VerticalCheck = Killaura:CreateToggle({
+		Name = 'Velocity Check',
+		Default = true,
+		Visible = false,
+		Tooltip = 'Only hits if the target has upward/downward momentum.'
 	})
 end)
 	
@@ -16845,97 +16896,6 @@ run(function()
     })
 end)
 
-run(function()
-    local AirHits = {Enabled = false}
-    local AirHitsChance = {Value = 100}
-    local AirHitsRange = {Value = 18}
-    local VerticalCheck = {Enabled = true}
-
-    -- Optimized Module in Blatant Category
-    local AirHitsModule = vape.Categories.Blatant:CreateModule({
-        Name = 'AirHits+',
-        Function = function(callback)
-            AirHits.Enabled = callback
-            if callback then
-                task.spawn(function()
-                    repeat
-                        -- 1. Performance Check: Hand/Sword Check
-                        local sword = store.tools.sword
-                        if sword and sword.tool then
-                            -- 2. Target Acquisition using Vape's Entity Library
-                            local targets = entitylib.AllPosition({
-                                Range = AirHitsRange.Value,
-                                Wallcheck = true,
-                                Players = true,
-                                NPCs = false,
-                                Limit = 1,
-                                Sort = 'Distance'
-                            })
-
-                            for _, v in pairs(targets) do
-                                local hum = v.Character:FindFirstChildOfClass("Humanoid")
-                                local root = v.RootPart
-                                
-                                if hum and root then
-                                    local state = hum:GetState()
-                                    local velocity = math.abs(root.Velocity.Y)
-                                    
-                                    -- 3. Logic: Is the target airborne?
-                                    local isJumping = (state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall)
-                                    local isMovingVertically = (VerticalCheck.Enabled and velocity > 0.1) or true
-
-                                    if isJumping and isMovingVertically then
-                                        -- 4. Probability Engine
-                                        if math.random(1, 100) <= AirHitsChance.Value then
-                                            local AttackRemote = bedwars.Client:Get(remotes.AttackEntity).instance
-                                            AttackRemote:FireServer({
-                                                weapon = sword.tool,
-                                                entityInstance = v.Character,
-                                                validate = {
-                                                    targetPosition = {value = root.Position},
-                                                    selfPosition = {value = entitylib.character.RootPart.Position}
-                                                }
-                                            })
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                        -- 5. Optimized Heartbeat: Prevents lag while remaining fast
-                        task.wait(0.05) 
-                    until not AirHits.Enabled
-                end)
-            end
-        end,
-        Tooltip = 'Enhanced Air Hits: Only targets players mid-jump or falling.'
-    })
-
-    -- UI Settings (Found in the 3-dot menu)
-    AirHitsChance = AirHitsModule:CreateSlider({
-        Name = 'Hit Chance',
-        Min = 1,
-        Max = 100,
-        Default = 90,
-        Suffix = '%',
-        Function = function(val) AirHitsChance.Value = val end
-    })
-
-    AirHitsRange = AirHitsModule:CreateSlider({
-        Name = 'Range',
-        Min = 1,
-        Max = 20,
-        Default = 18,
-        Suffix = ' studs',
-        Function = function(val) AirHitsRange.Value = val end
-    })
-
-    VerticalCheck = AirHitsModule:CreateToggle({
-        Name = 'Velocity Check',
-        Default = true,
-        Function = function(callback) VerticalCheck.Enabled = callback end,
-        Tooltip = 'Only hits if the target has upward/downward momentum.'
-    })
-end)
 run(function()
     local AntiHit = {Enabled = false}
     local AntiHitRange = {Value = 15}
