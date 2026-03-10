@@ -11,7 +11,7 @@ local vapeEvents = setmetatable({}, {
 		return self[index]
 	end
 })
-
+print("fix fast")
 local playersService = cloneref(game:GetService('Players'))
 local replicatedStorage = cloneref(game:GetService('ReplicatedStorage'))
 local runService = cloneref(game:GetService('RunService'))
